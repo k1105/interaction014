@@ -78,7 +78,7 @@ export default function App() {
 
       {ready && (
         <>
-          {/* <DebugSketch handpose={predictionsRef} /> */}
+          <DebugSketch handpose={predictionsRef} />
           <div ref={sketchContainerRef}>
             <HandSketch handpose={predictionsRef} />
           </div>
