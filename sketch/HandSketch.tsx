@@ -1,6 +1,6 @@
 import dynamic from "next/dynamic";
 import p5Types from "p5";
-import { MutableRefObject } from "react";
+import { MutableRefObject, useRef } from "react";
 import { Hand } from "@tensorflow-models/hand-pose-detection";
 import { getSmoothedHandpose } from "../lib/getSmoothedHandpose";
 import { updateHandposeHistory } from "../lib/updateHandposeHistory";
@@ -8,6 +8,7 @@ import { Keypoint } from "@tensorflow-models/hand-pose-detection";
 import { convertHandToHandpose } from "../lib/converter/convertHandToHandpose";
 import { isFront } from "../lib/calculator/isFront";
 import { giftwrap } from "../lib/calculator/giftwrap";
+import { Monitor } from "./Monitor";
 
 type Props = {
   handpose: MutableRefObject<Hand[]>;
@@ -17,6 +18,7 @@ let leftHand: Keypoint[] = [];
 let rightHand: Keypoint[] = [];
 let leftHandOpacity: number = 0;
 let rightHandOpacity: number = 0;
+const minimumFrame: number = 12;
 const rightHandposes: Keypoint[][][] = [[]];
 const rightHandposesHead: number[] = [0];
 
@@ -28,6 +30,7 @@ const Sketch = dynamic(import("react-p5"), {
 });
 
 export const HandSketch = ({ handpose }: Props) => {
+  const debugLog = useRef<{ label: string; value: any }[]>([]);
   let handposeHistory: {
     left: Handpose[];
     right: Handpose[];
@@ -44,6 +47,20 @@ export const HandSketch = ({ handpose }: Props) => {
   };
 
   const draw = (p5: p5Types) => {
+    // logとしてmonitorに表示する
+    debugLog.current = [];
+    for (const hand of handpose.current) {
+      debugLog.current.push({
+        label: hand.handedness + " accuracy",
+        value: hand.score,
+      });
+      debugLog.current.push({
+        label: hand.handedness + " is front",
+        //@ts-ignore
+        value: isFront(hand.keypoints, hand.handedness.toLowerCase()),
+      });
+    }
+
     const rawHands: {
       left: Handpose;
       right: Handpose;
@@ -78,11 +95,37 @@ export const HandSketch = ({ handpose }: Props) => {
       p5.pop();
     }
 
+    if (rightHandposes.length > 1) {
+      //ログモーションの描画
+      rightHandposes.forEach((hands, i) => {
+        if (hands.length > minimumFrame && i < rightHandposes.length - 1) {
+          p5.push();
+          p5.translate(
+            (hands[rightHandposesHead[i]][0].x * p5.width) / 600,
+            (hands[rightHandposesHead[i]][0].y * p5.height) / 400
+          );
+          const indices = giftwrap(hands[rightHandposesHead[i]]);
+          p5.beginShape();
+          for (const index of indices) {
+            p5.vertex(
+              hands[rightHandposesHead[i]][index].x,
+              hands[rightHandposesHead[i]][index].y
+            );
+          }
+          p5.endShape(p5.CLOSE);
+          p5.pop();
+          rightHandposesHead[i] = (rightHandposesHead[i] + 1) % hands.length;
+        }
+      });
+    }
+
     if (hands.right.length > 0) {
       rightHand = hands.right;
       rightHandOpacity = Math.min(255, rightHandOpacity + 255 / 10);
     } else {
       rightHandOpacity = Math.max(0, rightHandOpacity - 255 / 10);
+      //現在記録されていたフレーム情報の破棄
+      rightHandposes[rightHandposes.length - 1] = [];
     }
 
     if (rightHand.length > 0) {
@@ -113,28 +156,6 @@ export const HandSketch = ({ handpose }: Props) => {
       p5.endShape(p5.CLOSE);
       p5.pop();
     }
-    if (rightHandposes.length > 1) {
-      rightHandposes.forEach((hands, i) => {
-        if (hands.length > 0 && i < rightHandposes.length - 1) {
-          p5.push();
-          p5.translate(
-            (hands[rightHandposesHead[i]][0].x * p5.width) / 600,
-            (hands[rightHandposesHead[i]][0].y * p5.height) / 400
-          );
-          const indices = giftwrap(hands[rightHandposesHead[i]]);
-          p5.beginShape();
-          for (const index of indices) {
-            p5.vertex(
-              hands[rightHandposesHead[i]][index].x,
-              hands[rightHandposesHead[i]][index].y
-            );
-          }
-          p5.endShape(p5.CLOSE);
-          p5.pop();
-          rightHandposesHead[i] = (rightHandposesHead[i] + 1) % hands.length;
-        }
-      });
-    }
   };
 
   const windowResized = (p5: p5Types) => {
@@ -143,6 +164,7 @@ export const HandSketch = ({ handpose }: Props) => {
 
   return (
     <>
+      <Monitor handpose={handpose} debugLog={debugLog} />
       <Sketch
         preload={preload}
         setup={setup}

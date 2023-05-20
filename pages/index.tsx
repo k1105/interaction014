@@ -3,7 +3,6 @@ import "@tensorflow/tfjs";
 import * as handPoseDetection from "@tensorflow-models/hand-pose-detection";
 import Webcam from "react-webcam";
 import { HandSketch } from "../sketch/HandSketch";
-import { DebugSketch } from "../sketch/DebugSketch";
 import { PixelInput } from "@tensorflow-models/hand-pose-detection/dist/shared/calculators/interfaces/common_interfaces";
 import Head from "next/head";
 
@@ -12,7 +11,7 @@ export default function App() {
   const modelRef = useRef<null | handPoseDetection.HandDetector>(null);
   const predictionsRef = useRef<handPoseDetection.Hand[]>([]);
   const requestRef = useRef<null | number>(null);
-  const [ready, setReady] = useState(false);
+  const [ready, setReady] = useState<boolean>(false);
   const lostCountRef = useRef(0);
   const sketchContainerRef = useRef<HTMLDivElement>(null);
   // const timer = 120000;
@@ -25,7 +24,12 @@ export default function App() {
       ); //webcamの現時点でのフレームを取得し、ポーズ推定の結果をpredictionsに非同期で格納
 
       if (predictions) {
-        if (predictions.length > 0) {
+        if (
+          predictions.length > 0 &&
+          predictions.every((hand) => {
+            return hand.score > 0.75;
+          })
+        ) {
           predictionsRef.current = predictions;
           lostCountRef.current = 0;
         } else {
@@ -78,7 +82,6 @@ export default function App() {
 
       {ready && (
         <>
-          <DebugSketch handpose={predictionsRef} />
           <div ref={sketchContainerRef}>
             <HandSketch handpose={predictionsRef} />
           </div>
